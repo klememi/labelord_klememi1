@@ -1,4 +1,3 @@
-# This is skeleton for labelord module
 # MI-PYT, task 1 (requests+click)
 # File: labelord.py
 # TODO: create requirements.txt and install
@@ -6,8 +5,6 @@ import click
 import requests
 import configparser
 import sys
-# Structure your implementation as you want (OOP, FP, ...)
-# Try to make it DRY also for your own good
 
 
 @click.group('labelord')
@@ -17,30 +14,25 @@ import sys
 @click.version_option(version=0.1, prog_name='labelord')
 @click.pass_context
 def cli(ctx, config, token, colorful):
-    # TODO: Add and process required app-wide options
-    # You can/should use context 'ctx' for passing
-    # data and objects to commands
     cfg = configparser.ConfigParser()
     cfg.optionxform = str
     cfg.read(config)
     cfgtoken = cfg.get('github', 'token', fallback='')
-    github_token = token if token else cfgtoken
-    if not github_token:
-        error(3, 'No GitHub token has been provided')
-    ctx.obj['token'] = github_token
-    ctx.obj['session'] = requests.Session()
+    ctx.obj['token'] = token if token else cfgtoken
+    # ctx.obj['session'] = requests.Session()
     ctx.obj['colorful'] = colorful
     ctx.obj['config'] = cfg
-    set_session()
 
 
 @click.pass_context
 def set_session(ctx):
-    session = requests.Session()
-    session = ctx.obj.get('session')
+    session = ctx.obj.get('session', requests.Session())
     session.headers = {'User-Agent': 'mi-pyt-01-labelord'}
+    github_token = ctx.obj.get('token')
+    if not github_token:
+        error(3, 'No GitHub token has been provided')
     def token_auth(req):
-        req.headers['Authorization'] = 'token ' + ctx.obj.get('token')
+        req.headers['Authorization'] = 'token ' + github_token
         return req
     session.auth = token_auth
     ctx.obj['session'] = session
@@ -49,45 +41,58 @@ def set_session(ctx):
 def error(return_value, *args, **kwargs):
     if args:
         print(*args, file=sys.stderr, **kwargs)
-    sys.exit(return_value)
+    if return_value > 0:
+        sys.exit(return_value)
 
 
 @click.pass_context
 def get_response(ctx, uri):
-    session = ctx.obj.get('session')
+    session = ctx.obj.get('session', requests.Session())
     response = session.get('https://api.github.com/' + uri)
+    if response.status_code == 401:
+        error(4, 'GitHub: ERROR {} - {}'.format(response.status_code, response.json()['message']))
     return response, response.status_code
 
 
 @cli.command()
 @click.pass_context
 def list_repos(ctx):
-    response, code = get_response('user/repos?per_page=100&page=1')
+    """List accessible repositories."""
+    set_session()
+    page = 1
+    response, code = get_response('user/repos?per_page=100&page={}'.format(page))
     if code == 200:
-        for repo in response.json():
-            print(repo['full_name'])
-    elif code == 404:
-        error(4, response.json()['message'])
+        while response.json():
+            for repo in response.json():
+                print(repo['full_name'])
+            page += 1
+            response, code = get_response('user/repos?per_page=100&page={}'.format(page))
     else:
         error(10)
 
 
 @cli.command()
-@click.argument('reposlug')
+@click.argument('reposlug', metavar='REPOSITORY')
 @click.pass_context
 def list_labels(ctx, reposlug):
-    response, code = get_response('repos/{}/labels?per_page=100&page=1'.format(reposlug))
+    """List labels of desired repository."""
+    set_session()
+    page = 1
+    response, code = get_response('repos/{}/labels?per_page=100&page={}'.format(reposlug, page))
     if code == 200:
-        for label in response.json():
-            print('#{} {}'.format(label['color'], label['name']))
+        while response.json():
+            for label in response.json():
+                print('#{} {}'.format(label['color'], label['name']))
+            page += 1
+            response, code = get_response('repos/{}/labels?per_page=100&page={}'.format(reposlug, page))
     elif code == 404:
-        error(5, response.json()['message'])
+        error(5, 'GitHub: ERROR {} - {}'.format('404', response.json()['message']))
     else:
         error(10)
 
 
 @cli.command()
-@click.argument('mode', type=click.Choice(['update', 'replace']))
+@click.argument('mode', type=click.Choice(['update', 'replace']), metavar='<update|replace>')
 @click.option('-a', '--all-repos', is_flag=True, help='Use all accessible repositories.')
 @click.option('-d', '--dry-run', is_flag=True, help='Doesn\'t make any changes to GitHub, just prints them.')
 @click.option('-v', '--verbose', is_flag=True, help='Turns on logs on standard output.')
@@ -95,11 +100,98 @@ def list_labels(ctx, reposlug):
 @click.option('-r', '--template-repo', default='', help='Repository to use as a template.')
 @click.pass_context
 def run(ctx, mode, all_repos, dry_run, verbose, quiet, template_repo):
+    """Run labels processing."""
+    set_session()
     config = ctx.obj.get('config')
     template_repository = template_repo if template_repo else config.get('others', 'template-repo', fallback='')
     labels = get_labels(template_repository, config)
     repos = get_repos(all_repos, config)
-    
+    logging = 0
+    logging += 1 if verbose else 0
+    logging += 2 if quiet else 0
+    update(repos, labels, dry_run, logging) if mode == 'update' else replace(repos, labels, dry_run, logging)
+
+
+@click.pass_context
+def update_label(ctx, repo, label, data):
+    session = ctx.obj.get('session', requests.Session())
+    response = session.patch('https://api.github.com/repos/{}/labels/{}'.format(repo, label), data)
+    return response.status_code
+
+
+@click.pass_context
+def add_label(ctx, repo, data):
+    session = ctx.obj.get('session', requests.Session())
+    response = session.post('https://api.github.com/repos/{}/labels'.format(repo), data)
+    return response.status_code
+
+
+def update(repos, labels, dry_run, logging):
+    errors = 0
+    update_repos = set()
+    for repo in repos:
+        response, code = get_response('repos/{}/labels?per_page=100&page=1'.format(repo))
+        if code == 200:
+            repo_labels = {label['name']: label['color'] for label in response.json()}
+            for label in labels:
+                if label in repo_labels.keys():
+                    if labels[label] != repo_labels[label]:
+                        if not dry_run:
+                            update_data = {"name": label, "color": labels[label]}
+                            response_code = update_label(repo, label, update_data)
+                            if response_code == 200:
+                                print('[UPD][SUC] {}; {}; {}'.format(repo, label, labels[label]))
+                                update_repos.add(repo)
+                            elif logging == 1:
+                                print('[UPD][ERR] {}; {}; {}'.format(repo, label, labels[label]))
+                                errors += 1
+                            elif logging == 0 or logging == 3:
+                                error(0, 'ERROR: UPD; {}; {}; {}; {} - {}'.format(repo, label, labels[label], code, response.json()['message']))
+                                errors += 1
+                        else:
+                            update_repos.add(repo)
+                            if logging == 1:
+                                print('[UPD][DRY] {}; {}; {}'.format(repo, label, labels[label]))
+                else:
+                    if not dry_run:
+                        add_data = {"name": label, "color": labels[label]}
+                        response_code = add_label(repo, add_data)
+                        if response_code == 200:
+                            print('[ADD][SUC] {}; {}; {}'.format(repo, label, labels[label]))
+                            update_repos.add(repo)
+                        elif logging == 1:
+                            print('[ADD][ERR] {}; {}; {}'.format(repo, label, labels[label]))
+                            errors += 1
+                        elif logging == 0 or logging == 3:
+                            error(0, 'ERROR: ADD; {}; {}; {}; {} - {}'.format(repo, label, labels[label], code, response.json()['message']))
+                            errors += 1
+                    else:
+                        update_repos.add(repo)
+                        if logging == 1:
+                            print('[ADD][DRY] {}; {}; {}'.format(repo, label, labels[label]))
+
+        elif logging == 1:
+            error(0, '[LBL][ERR] {}; {} - {}'.format(repo, code, response.json()['message']))
+            errors += 1
+        elif logging == 0 or logging == 3:
+            error(0, 'ERROR: LBL; {}; {} - {}'.format(repo, code, response.json()['message']))
+            errors += 1
+    if errors > 0:
+        if logging == 1:
+            error(10, '[SUMMARY] {} error(s) in total, please check log above'.format(errors))
+        elif logging == 0 or logging == 3:
+            error(10, 'SUMMARY: {} error(s) in total, please check log above'.format(errors))
+        else:
+            error(10)
+    elif logging == 1:
+        print('[SUMMARY] {} repo(s) updated successfully'.format(len(update_repos)))
+    elif logging == 0 or logging == 3:
+        print('SUMMARY: {} repo(s) updated successfully'.format(len(update_repos)))
+
+
+
+def replace(repos, labels, dry_run, logging):
+    print()
 
 
 def get_labels(template_repository, config):
