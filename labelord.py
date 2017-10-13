@@ -1,6 +1,6 @@
 # MI-PYT, task 1 (requests+click)
 # File: labelord.py
-# TODO: create requirements.txt and install
+# TODO: add colorful option & refactoring!
 import click
 import requests
 import configparser
@@ -77,9 +77,7 @@ def run(ctx, mode, all_repos, dry_run, verbose, quiet, template_repo):
     template_repository = template_repo if template_repo else config.get('others', 'template-repo', fallback='')
     labels = get_labels(template_repository, config)
     repos = get_repos(all_repos, config)
-    logging = 0
-    logging += 1 if verbose else 0
-    logging += 2 if quiet else 0
+    logging = 1 if verbose and not quiet else 2 if quiet and not verbose else 0
     perform_operation(True if mode == 'replace' else False, repos, labels, dry_run, logging)
 
 
@@ -163,7 +161,7 @@ def perform_operation(replace, repos, labels, dry_run, logging):
                             elif response_code != 200 and logging == 1:
                                 print('[UPD][ERR] {}; {}; {}; {} - {}'.format(repo, label, labels[label], response_code, message))
                                 errors += 1
-                            elif response_code != 200 and (logging == 0 or logging == 3):
+                            elif response_code != 200 and logging == 0:
                                 error(0, 'ERROR: UPD; {}; {}; {}; {} - {}'.format(repo, label, labels[label], response_code, message))
                                 errors += 1
                             elif response_code != 200:
@@ -180,7 +178,7 @@ def perform_operation(replace, repos, labels, dry_run, logging):
                         elif response_code != 201 and logging == 1:
                             print('[ADD][ERR] {}; {}; {}; {} - {}'.format(repo, label, labels[label], response_code, message))
                             errors += 1
-                        elif response_code != 201 and (logging == 0 or logging == 3):
+                        elif response_code != 201 and logging == 0:
                             error(0, 'ERROR: ADD; {}; {}; {}; {} - {}'.format(repo, label, labels[label], response_code, message))
                             errors += 1
                         elif response_code != 201:
@@ -196,7 +194,7 @@ def perform_operation(replace, repos, labels, dry_run, logging):
                     elif response_code != 204 and logging == 1:
                         print('[DEL][ERR] {}; {}; {}; {} - {}'.format(repo, label, repo_labels[label], response_code, message))
                         errors += 1
-                    elif response_code != 204 and (logging == 0 or logging == 3):
+                    elif response_code != 204 and logging == 0:
                         error(0, 'ERROR: DEL; {}; {}; {}; {} - {}'.format(repo, label, repo_labels[label], response_code, message))
                         errors += 1
                     elif response_code != 204:
@@ -207,7 +205,7 @@ def perform_operation(replace, repos, labels, dry_run, logging):
         elif logging == 1:
             print('[LBL][ERR] {}; {} - {}'.format(repo, code, response.json().get('message', '')))
             errors += 1
-        elif logging == 0 or logging == 3:
+        elif logging == 0:
             error(0, 'ERROR: LBL; {}; {} - {}'.format(repo, code, response.json().get('message', '')))
             errors += 1
         else:
@@ -215,12 +213,12 @@ def perform_operation(replace, repos, labels, dry_run, logging):
     if errors > 0:
         if logging == 1:
             print('[SUMMARY] {} error(s) in total, please check log above'.format(errors))
-        elif logging == 0 or logging == 3:
+        elif logging == 0:
             print('SUMMARY: {} error(s) in total, please check log above'.format(errors))
         error(10)
     elif logging == 1:
         print('[SUMMARY] {} repo(s) updated successfully'.format(len(update_repos)))
-    elif logging == 0 or logging == 3:
+    elif logging == 0:
         print('SUMMARY: {} repo(s) updated successfully'.format(len(update_repos)))
 
 
