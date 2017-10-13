@@ -1,0 +1,7 @@
+# Requirements for this app
+# run 'pip install -r requirements.txt' to install them
+click==6.7
+requests==2.18.4
+betamax==0.8.0
+flexmock==0.10.2
+pytest==3.2.3
