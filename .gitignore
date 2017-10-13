@@ -3,6 +3,8 @@ config.cfg
 
 # tests
 /tests
+/tests_cli
+/tests_web
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
