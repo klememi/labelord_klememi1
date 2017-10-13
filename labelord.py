@@ -10,16 +10,14 @@ import sys
 @click.group('labelord')
 @click.option('-c', '--config', default='./config.cfg', help='Configuration file path.')
 @click.option('-t', '--token', envvar='GITHUB_TOKEN', default='', help='GitHub token.')
-@click.option('-y', '--colorful', is_flag=True, help='Turns on colors for logs.')
 @click.version_option(version=0.1, prog_name='labelord')
 @click.pass_context
-def cli(ctx, config, token, colorful):
+def cli(ctx, config, token):
     cfg = configparser.ConfigParser()
     cfg.optionxform = str
     cfg.read(config)
     cfgtoken = cfg.get('github', 'token', fallback='')
     ctx.obj['token'] = token if token else cfgtoken
-    ctx.obj['colorful'] = colorful
     ctx.obj['config'] = cfg
 
 
@@ -34,6 +32,8 @@ def list_repos(ctx):
         while response.json():
             for repo in response.json():
                 print(repo['full_name'])
+            if len(response.json()) < 100:
+                break
             page += 1
             response, code = get_response('user/repos?per_page=100&page={}'.format(page))
     else:
@@ -52,10 +52,12 @@ def list_labels(ctx, reposlug):
         while response.json():
             for label in response.json():
                 print('#{} {}'.format(label['color'], label['name']))
+            if len(response.json()) < 100:
+                break
             page += 1
             response, code = get_response('repos/{}/labels?per_page=100&page={}'.format(reposlug, page))
     elif code == 404:
-        error(5, 'GitHub: ERROR {} - {}'.format('404', response.json()['message']))
+        error(5, 'GitHub: ERROR {} - {}'.format('404', response.json().get('message', '')))
     else:
         error(10)
 
@@ -107,7 +109,7 @@ def get_response(ctx, uri):
     session = ctx.obj.get('session', requests.Session())
     response = session.get('https://api.github.com/' + uri)
     if response.status_code == 401:
-        error(4, 'GitHub: ERROR {} - {}'.format(response.status_code, response.json()['message']))
+        error(4, 'GitHub: ERROR {} - {}'.format(response.status_code, response.json().get('message', '')))
     return response, response.status_code
 
 
@@ -115,21 +117,27 @@ def get_response(ctx, uri):
 def update_label(ctx, repo, label, data):
     session = ctx.obj.get('session', requests.Session())
     response = session.patch('https://api.github.com/repos/{}/labels/{}'.format(repo, label), data)
-    return response.status_code, response.json()['message']
+    if response.status_code == 200:
+        return response.status_code, None
+    return response.status_code, response.json().get('message', '')
 
 
 @click.pass_context
 def add_label(ctx, repo, data):
     session = ctx.obj.get('session', requests.Session())
     response = session.post('https://api.github.com/repos/{}/labels'.format(repo), data)
-    return response.status_code, response.json()['message']
+    if response.status_code == 201:
+        return response.status_code, None
+    return response.status_code, response.json().get('message', '')
 
 
 @click.pass_context
 def delete_label(ctx, repo, label):
     session = ctx.obj.get('session', requests.Session())
     response = session.delete('https://api.github.com/repos/{}/labels/{}'.format(repo, label))
-    return response.status_code, response.json()['message']
+    if response.status_code == 204:
+        return response.status_code, None
+    return response.status_code, response.json().get('message', '')
 
 
 def perform_operation(replace, repos, labels, dry_run, logging):
@@ -144,70 +152,72 @@ def perform_operation(replace, repos, labels, dry_run, logging):
             if replace:
                 labels_to_delete = {label for label in repo_labels} - {label for label in labels}
             for label in labels:
-                if label in repo_labels.keys():
-                    if labels[label] != repo_labels[label]:
+                if label.lower() in (repo_label.lower() for repo_label in repo_labels):
+                    rlabel = list(filter(lambda rlabel: rlabel == label.lower(), (rlabel.lower() for rlabel in repo_labels)))[0]
+                    if labels.get(label, 'label') != repo_labels.get(label, 'repo_label'):
                         if not dry_run:
                             update_data = {"name": label, "color": labels[label]}
-                            response_code, message = update_label(repo, label, update_data)
-                            if response_code == 200:
+                            response_code, message = update_label(repo, rlabel, update_data)
+                            if response_code == 200 and logging == 1:
                                 print('[UPD][SUC] {}; {}; {}'.format(repo, label, labels[label]))
-                                update_repos.add(repo)
-                            elif logging == 1:
+                            elif response_code != 200 and logging == 1:
                                 print('[UPD][ERR] {}; {}; {}; {} - {}'.format(repo, label, labels[label], response_code, message))
                                 errors += 1
-                            elif logging == 0 or logging == 3:
+                            elif response_code != 200 and (logging == 0 or logging == 3):
                                 error(0, 'ERROR: UPD; {}; {}; {}; {} - {}'.format(repo, label, labels[label], response_code, message))
                                 errors += 1
+                            elif response_code != 200:
+                                errors += 1
                         else:
-                            update_repos.add(repo)
                             if logging == 1:
                                 print('[UPD][DRY] {}; {}; {}'.format(repo, label, labels[label]))
                 else:
                     if not dry_run:
                         add_data = {"name": label, "color": labels[label]}
                         response_code, message = add_label(repo, add_data)
-                        if response_code == 201:
+                        if response_code == 201 and logging == 1:
                             print('[ADD][SUC] {}; {}; {}'.format(repo, label, labels[label]))
-                            update_repos.add(repo)
-                        elif logging == 1:
+                        elif response_code != 201 and logging == 1:
                             print('[ADD][ERR] {}; {}; {}; {} - {}'.format(repo, label, labels[label], response_code, message))
                             errors += 1
-                        elif logging == 0 or logging == 3:
+                        elif response_code != 201 and (logging == 0 or logging == 3):
                             error(0, 'ERROR: ADD; {}; {}; {}; {} - {}'.format(repo, label, labels[label], response_code, message))
                             errors += 1
+                        elif response_code != 201:
+                            errors += 1
                     else:
-                        update_repos.add(repo)
                         if logging == 1:
                             print('[ADD][DRY] {}; {}; {}'.format(repo, label, labels[label]))
             for label in labels_to_delete:
                 if not dry_run:
                     response_code, message = delete_label(repo, label)
-                    if response_code == 204:
-                        print('[DEL][SUC] {}; {}; {}'.format(repo, label, labels[label]))
-                        update_repos.add(repo)
-                    elif logging == 1:
-                        print('[DEL][ERR] {}; {}; {}; {} - {}'.format(repo, label, labels[label], response_code, message))
+                    if response_code == 204 and logging == 1:
+                        print('[DEL][SUC] {}; {}; {}'.format(repo, label, repo_labels[label]))
+                    elif response_code != 204 and logging == 1:
+                        print('[DEL][ERR] {}; {}; {}; {} - {}'.format(repo, label, repo_labels[label], response_code, message))
                         errors += 1
-                    elif logging == 0 or logging == 3:
-                        error(0, 'ERROR: DEL; {}; {}; {}; {} - {}'.format(repo, label, labels[label], response_code, message))
+                    elif response_code != 204 and (logging == 0 or logging == 3):
+                        error(0, 'ERROR: DEL; {}; {}; {}; {} - {}'.format(repo, label, repo_labels[label], response_code, message))
+                        errors += 1
+                    elif response_code != 204:
                         errors += 1
                 else:
-                    update_repos.add(repo)
                     if logging == 1:
-                        print('[DEL][DRY] {}; {}; {}'.format(repo, label, labels[label]))
+                        print('[DEL][DRY] {}; {}; {}'.format(repo, label, repo_labels[label]))
         elif logging == 1:
-            error(0, '[LBL][ERR] {}; {} - {}'.format(repo, code, response.json()['message']))
+            print('[LBL][ERR] {}; {} - {}'.format(repo, code, response.json().get('message', '')))
             errors += 1
         elif logging == 0 or logging == 3:
-            error(0, 'ERROR: LBL; {}; {} - {}'.format(repo, code, response.json()['message']))
+            error(0, 'ERROR: LBL; {}; {} - {}'.format(repo, code, response.json().get('message', '')))
+            errors += 1
+        else:
             errors += 1
     if errors > 0:
         if logging == 1:
-            error(10, '[SUMMARY] {} error(s) in total, please check log above'.format(errors))
+            print('[SUMMARY] {} error(s) in total, please check log above'.format(errors))
         elif logging == 0 or logging == 3:
-            error(10, 'SUMMARY: {} error(s) in total, please check log above'.format(errors))
-        else:
-            error(10)
+            print('SUMMARY: {} error(s) in total, please check log above'.format(errors))
+        error(10)
     elif logging == 1:
         print('[SUMMARY] {} repo(s) updated successfully'.format(len(update_repos)))
     elif logging == 0 or logging == 3:
@@ -220,7 +230,7 @@ def get_labels(template_repository, config):
         if code == 200:
             return {label['name']: label['color'] for label in response.json()}
         else:
-            error(10, response.json()['message'])
+            error(10, response.json().get('message', ''))
     elif 'labels' in config:
         return {label: config['labels'][label] for label in config['labels']}
     else:
@@ -233,7 +243,7 @@ def get_repos(all_repos, config):
         if code == 200:
             return [repo['full_name'] for repo in response.json()]
         else:
-            error(10, response.json()['message'])
+            error(10, response.json().get('message', ''))
     elif 'repos' in config:
         return [repo for repo in config['repos'] if config['repos'].getboolean(repo)]
     else:
