@@ -116,7 +116,7 @@ def get_response(ctx, uri):
 @click.pass_context
 def update_label(ctx, repo, label, data):
     session = ctx.obj.get('session', requests.Session())
-    response = session.patch('https://api.github.com/repos/{}/labels/{}'.format(repo, label), data)
+    response = session.patch('https://api.github.com/repos/{}/labels/{}'.format(repo, label), json=data)
     if response.status_code == 200:
         return response.status_code, None
     return response.status_code, response.json().get('message', '')
@@ -125,7 +125,7 @@ def update_label(ctx, repo, label, data):
 @click.pass_context
 def add_label(ctx, repo, data):
     session = ctx.obj.get('session', requests.Session())
-    response = session.post('https://api.github.com/repos/{}/labels'.format(repo), data)
+    response = session.post('https://api.github.com/repos/{}/labels'.format(repo), json=data)
     if response.status_code == 201:
         return response.status_code, None
     return response.status_code, response.json().get('message', '')
