@@ -10,9 +10,9 @@ import os
 
 
 @click.group('labelord')
-@click.option('-c', '--config', default='./config.cfg', help='Configuration file path.')
+@click.option('-c', '--config', default='./config.cfg', envvar='LABELORD_CONFIG', help='Configuration file path.')
 @click.option('-t', '--token', envvar='GITHUB_TOKEN', default='', help='GitHub token.')
-@click.version_option(version=0.1, prog_name='labelord')
+@click.version_option(version=0.2, prog_name='labelord')
 @click.pass_context
 def cli(ctx, config, token):
     cfg = configparser.ConfigParser()
@@ -21,6 +21,7 @@ def cli(ctx, config, token):
     cfgtoken = cfg.get('github', 'token', fallback='')
     ctx.obj['token'] = token if token else cfgtoken
     ctx.obj['config'] = cfg
+
 
 
 @cli.command()
@@ -116,7 +117,7 @@ def get_response(ctx, uri):
 @click.pass_context
 def update_label(ctx, repo, label, data):
     session = ctx.obj.get('session', requests.Session())
-    response = session.patch('https://api.github.com/repos/{}/labels/{}'.format(repo, label), data)
+    response = session.patch('https://api.github.com/repos/{}/labels/{}'.format(repo, label), json=data)
     if response.status_code == 200:
         return response.status_code, None
     return response.status_code, response.json().get('message', '')
@@ -125,7 +126,7 @@ def update_label(ctx, repo, label, data):
 @click.pass_context
 def add_label(ctx, repo, data):
     session = ctx.obj.get('session', requests.Session())
-    response = session.post('https://api.github.com/repos/{}/labels'.format(repo), data)
+    response = session.post('https://api.github.com/repos/{}/labels'.format(repo), json=data)
     if response.status_code == 201:
         return response.status_code, None
     return response.status_code, response.json().get('message', '')
@@ -254,21 +255,16 @@ class LabelordWeb(flask.Flask):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # You can do something here, but you don't have to...
-        # Adding more args before *args is also possible
-        # You need to pass import_name to super as first arg or
-        # via keyword (e.g. import_name=__name__)
-        # Be careful not to override something Flask-specific
-        # @see http://flask.pocoo.org/docs/0.12/api/
-        # @see https://github.com/pallets/flask
+
 
     def inject_session(self, session):
+
         # TODO: inject session for communication with GitHub
         # The tests will call this method to pass the testing session.
         # Always use session from this call (it will be called before
         # any HTTP request). If this method is not called, create new
         # session.
-        ...
+        print('inject_session')
 
     def reload_config(self):
         # TODO: check envvar LABELORD_CONFIG and reload the config
@@ -276,24 +272,44 @@ class LabelordWeb(flask.Flask):
         # different configuration, this method will be called in
         # order to reload configuration file. Check if everything
         # is correctly set-up
-        ...
+        print('reload_config')
 
 
 # TODO: instantiate LabelordWeb app
 # Be careful with configs, this is module-wide variable,
 # you want to be able to run CLI app as it was in task 1.
-app = ...
+app = LabelordWeb(__name__)
 
 # TODO: implement web app
 # hint: you can use flask.current_app (inside app context)
+def response_get():
+    envvar_config = os.environ.get('LABELORD_CONFIG')
+    configpath = envvar_config if envvar_config else './config.cfg'
+    config = configparser.ConfigParser()
+    config.optionxform = str
+    config.read(configpath)
+    return [repo for repo in config['repos'] if config['repos'].getboolean(repo)]
+
+
+@app.route('/', methods=['GET', 'POST'])
+def get():
+    if flask.request.method == 'GET':
+        repos = response_get()
+        return flask.make_response(flask.render_template('index.html', repos=repos), 200)
+    else:
+        return flask.request
 
 
 @cli.command()
 @click.pass_context
-def run_server(ctx):
+@click.option('--host', '-h', default='127.0.0.1', help='Hostname.')
+@click.option('--port', '-p', default=5000, help='Port.')
+@click.option('--debug', '-d', is_flag=True, envvar='FLASK_DEBUG', help='Debug mode.')
+def run_server(ctx, host, port, debug):
+    """Start local server app"""
+    app.run(host=host, port=port, debug=debug)
     # TODO: implement the command for starting web app (use app.run)
     # Don't forget to app the session from context to app
-    ...
 #######################################################################
 #######################################################################
 if __name__ == '__main__':

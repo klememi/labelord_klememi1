@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>MI-PYT Task 02 - Labelord</title>
+    <link href="https://fonts.googleapis.com/css?family=Bangers" rel="stylesheet">
+    <style>
+        html { background: url({{ url_for('static', filename='bg.jpg') }}) repeat; font-family: 'Bangers', cursive; }
+        h1, h2 { text-shadow: -2px -2px #fff; color: #000; }
+        a { color: #000; }
+    </style>
+</head>
+<body>
+    <h1>This web app keeps labels in configured GitHub repos synchronized!</h1>
+    <br>
+    <h2>Configured repos:</h2>
+    {% for repo in repos %}
+    <h1><a href="https://github.com/{{repo}}">https://github.com/{{repo}}</a></h1>
+    {% endfor %}
+</body>
+</html>
