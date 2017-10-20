@@ -259,14 +259,12 @@ class LabelordWeb(flask.Flask):
         self.lblconfig = None
         self.ghsession = None
         self.lastlabel = None
+        self.lastaction = None
 
 
     def inject_session(self, session):
-        # session = requests.Session()
         session.headers = {'User-Agent': 'mi-pyt-02-labelord'}
-        github_token = self.lblconfig['github']['token']
-        if not github_token:
-            error(3, 'No GitHub token has been provided')
+        github_token = self.lblconfig['github'].get('token', '')
         def token_auth(req):
             req.headers['Authorization'] = 'token ' + github_token
             return req
@@ -282,24 +280,22 @@ class LabelordWeb(flask.Flask):
             configpath = './config.cfg'
         self.lblconfig.read(configpath)
         check_config(self.lblconfig)
-        # self.secret_key = self.lblconfig['github']['webhook_secret']
 
 
 def check_config(lblconfig):
     token = lblconfig.get('github', 'token', fallback='')
     webhook_secret = lblconfig.get('github', 'webhook_secret', fallback='')
-    if not token:
-        error(3, 'No GitHub token has been provided')
-    elif not webhook_secret:
+    if not webhook_secret:
         error(8, 'No webhook secret has been provided')
     elif not 'repos' in lblconfig:
         error(7, 'No repositories specification has been found')
+    elif not token:
+        error(3, 'No GitHub token has been provided')
 
 
 def create_app():
     app = LabelordWeb(__name__)
     app.reload_config()
-    # app.secret_key = app.lblconfig['github']['webhook_secret']
     return app
 
 
@@ -348,20 +344,14 @@ def sync_labels(event, repos, label, color):
         for repo in repos:
             data = {"name": label, "color": color}
             code, msg = add_label(session, repo, data)
-            # if code != 201:
-            #     return flask.make_response(msg, code)
     elif event == 'edited':
         for repo in repos:
             data = {"name": label, "color": color}
             code, msg = update_label(session, repo, label, data)
-            # if code != 200:
-            #     return flask.make_response(msg, code)
     else:
         # deleted
         for repo in repos:
             code, msg = delete_label(session, repo, label)
-            # if code != 204:
-            #     return flask.make_response(msg, code)
     return flask.make_response('OK', 200)
 
 
@@ -384,11 +374,14 @@ def post():
 
 def is_redundant():
     json_data = json.loads(flask.request.data)
+    new_action = json_data['action']
     new_label = json_data['label']['name']
-    if new_label != app.lastlabel:
+    if (new_label != app.lastlabel) or (new_action != app.lastaction):
         app.lastlabel = new_label
+        app.lastaction = new_action
         return False
     return True
+
 
 @app.route('/', methods=['GET', 'POST'])
 def respond():
@@ -416,7 +409,6 @@ def run_server(ctx, host, port, debug):
     app.lblconfig = ctx.obj['config']
     app.ghsession = ctx.obj['session']
     check_config(app.lblconfig)
-    # app.secret_key = app.lblconfig['github']['secret']
     app.run(host=host, port=port, debug=debug)
 #######################################################################
 #######################################################################
