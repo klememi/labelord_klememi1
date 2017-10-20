@@ -78,13 +78,13 @@ def list_labels(ctx, reposlug):
 @click.pass_context
 def run(ctx, mode, all_repos, dry_run, verbose, quiet, template_repo):
     """Run labels processing."""
-    set_session()
+    session = set_session()
     config = ctx.obj.get('config')
     template_repository = template_repo if template_repo else config.get('others', 'template-repo', fallback='')
     labels = get_labels(template_repository, config)
     repos = get_repos(all_repos, config)
     logging = 1 if verbose and not quiet else 2 if quiet and not verbose else 0
-    perform_operation(True if mode == 'replace' else False, repos, labels, dry_run, logging)
+    perform_operation(True if mode == 'replace' else False, repos, labels, dry_run, logging, session)
 
 
 @click.pass_context
@@ -99,6 +99,7 @@ def set_session(ctx):
         return req
     session.auth = token_auth
     ctx.obj['session'] = session
+    return session
 
 
 def error(return_value, *args, **kwargs):
@@ -117,34 +118,31 @@ def get_response(ctx, uri):
     return response, response.status_code
 
 
-@click.pass_context
-def update_label(ctx, repo, label, data):
-    session = ctx.obj.get('session', requests.Session())
+def update_label(session, repo, label, data):
+    # session = ctx.obj.get('session', requests.Session())
     response = session.patch('https://api.github.com/repos/{}/labels/{}'.format(repo, label), json=data)
     if response.status_code == 200:
         return response.status_code, None
     return response.status_code, response.json().get('message', '')
 
 
-@click.pass_context
-def add_label(ctx, repo, data):
-    session = ctx.obj.get('session', requests.Session())
+def add_label(session, repo, data):
+    # session = ctx.obj.get('session', requests.Session())
     response = session.post('https://api.github.com/repos/{}/labels'.format(repo), json=data)
     if response.status_code == 201:
         return response.status_code, None
     return response.status_code, response.json().get('message', '')
 
 
-@click.pass_context
-def delete_label(ctx, repo, label):
-    session = ctx.obj.get('session', requests.Session())
+def delete_label(session, repo, label):
+    # session = ctx.obj.get('session', requests.Session())
     response = session.delete('https://api.github.com/repos/{}/labels/{}'.format(repo, label))
     if response.status_code == 204:
         return response.status_code, None
     return response.status_code, response.json().get('message', '')
 
 
-def perform_operation(replace, repos, labels, dry_run, logging):
+def perform_operation(replace, repos, labels, dry_run, logging, session):
     errors = 0
     update_repos = set()
     for repo in repos:
@@ -161,7 +159,7 @@ def perform_operation(replace, repos, labels, dry_run, logging):
                     if labels.get(label, 'label') != repo_labels.get(label, 'repo_label'):
                         if not dry_run:
                             update_data = {"name": label, "color": labels[label]}
-                            response_code, message = update_label(repo, rlabel, update_data)
+                            response_code, message = update_label(session, repo, rlabel, update_data)
                             if response_code == 200 and logging == 1:
                                 print('[UPD][SUC] {}; {}; {}'.format(repo, label, labels[label]))
                             elif response_code != 200 and logging == 1:
@@ -178,7 +176,7 @@ def perform_operation(replace, repos, labels, dry_run, logging):
                 else:
                     if not dry_run:
                         add_data = {"name": label, "color": labels[label]}
-                        response_code, message = add_label(repo, add_data)
+                        response_code, message = add_label(session, repo, add_data)
                         if response_code == 201 and logging == 1:
                             print('[ADD][SUC] {}; {}; {}'.format(repo, label, labels[label]))
                         elif response_code != 201 and logging == 1:
@@ -194,7 +192,7 @@ def perform_operation(replace, repos, labels, dry_run, logging):
                             print('[ADD][DRY] {}; {}; {}'.format(repo, label, labels[label]))
             for label in labels_to_delete:
                 if not dry_run:
-                    response_code, message = delete_label(repo, label)
+                    response_code, message = delete_label(session, repo, label)
                     if response_code == 204 and logging == 1:
                         print('[DEL][SUC] {}; {}; {}'.format(repo, label, repo_labels[label]))
                     elif response_code != 204 and logging == 1:
@@ -259,15 +257,21 @@ class LabelordWeb(flask.Flask):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.lblconfig = None
+        self.ghsession = None
+        self.lastlabel = None
 
 
     def inject_session(self, session):
-        # TODO: inject session for communication with GitHub
-        # The tests will call this method to pass the testing session.
-        # Always use session from this call (it will be called before
-        # any HTTP request). If this method is not called, create new
-        # session.
-        print('inject_session')
+        # session = requests.Session()
+        session.headers = {'User-Agent': 'mi-pyt-02-labelord'}
+        github_token = self.lblconfig['github']['token']
+        if not github_token:
+            error(3, 'No GitHub token has been provided')
+        def token_auth(req):
+            req.headers['Authorization'] = 'token ' + github_token
+            return req
+        session.auth = token_auth
+        self.ghsession = session
 
 
     def reload_config(self):
@@ -278,6 +282,7 @@ class LabelordWeb(flask.Flask):
             configpath = './config.cfg'
         self.lblconfig.read(configpath)
         check_config(self.lblconfig)
+        # self.secret_key = self.lblconfig['github']['webhook_secret']
 
 
 def check_config(lblconfig):
@@ -294,10 +299,16 @@ def check_config(lblconfig):
 def create_app():
     app = LabelordWeb(__name__)
     app.reload_config()
+    # app.secret_key = app.lblconfig['github']['webhook_secret']
     return app
 
 
 app = create_app()
+
+
+def load_repos():
+    config = app.lblconfig
+    return [repo for repo in config['repos'] if config['repos'].getboolean(repo)]
 
 
 def verify_signature(request):
@@ -309,29 +320,88 @@ def verify_signature(request):
     return hmac.compare_digest('sha1=' + signature, request_signature)
 
 
-def check_event(event):
-    return event and (event == 'ping' or event == 'label')
-
-
 def check_request(request):
     json_data = json.loads(request.data)
     repo = json_data['repository']['full_name']
     repos = load_repos()
-    event = request.headers.get('X-Github-Event', '')
-    return (repo in repos) and check_event(event)
+    return repo in repos
 
+
+def get():
+    repos = load_repos()
+    return flask.make_response(flask.render_template('index.html', repos=repos), 200)
+
+
+def sync_labels(event, repos, label, color):
+    session = app.ghsession
+    if not session:
+        session = requests.Session()
+        session.headers = {'User-Agent': 'mi-pyt-02-labelord'}
+        github_token = app.lblconfig['github']['token']
+        if not github_token:
+            error(3, 'No GitHub token has been provided')
+        def token_auth(req):
+            req.headers['Authorization'] = 'token ' + github_token
+            return req
+        session.auth = token_auth
+    if event == 'created':
+        for repo in repos:
+            data = {"name": label, "color": color}
+            code, msg = add_label(session, repo, data)
+            # if code != 201:
+            #     return flask.make_response(msg, code)
+    elif event == 'edited':
+        for repo in repos:
+            data = {"name": label, "color": color}
+            code, msg = update_label(session, repo, label, data)
+            # if code != 200:
+            #     return flask.make_response(msg, code)
+    else:
+        # deleted
+        for repo in repos:
+            code, msg = delete_label(session, repo, label)
+            # if code != 204:
+            #     return flask.make_response(msg, code)
+    return flask.make_response('OK', 200)
+
+
+def post():
+    if not verify_signature(flask.request):
+        return flask.make_response('UNAUTHORIZED', 401)
+    elif not check_request(flask.request):
+        return flask.make_response('BAD REQUEST', 400)
+    if is_redundant():
+        return flask.make_response('OK', 200)
+    repos = load_repos()
+    json_data = json.loads(flask.request.data)
+    original_repo = json_data['repository']['full_name']
+    event = json_data['action']
+    todo_repos = list(filter(lambda x: x != original_repo, repos))
+    label = json_data['label']['name']
+    color = json_data['label']['color']
+    return sync_labels(event, todo_repos, label, color)
+
+
+def is_redundant():
+    json_data = json.loads(flask.request.data)
+    new_label = json_data['label']['name']
+    if new_label != app.lastlabel:
+        app.lastlabel = new_label
+        return False
+    return True
 
 @app.route('/', methods=['GET', 'POST'])
 def respond():
     if flask.request.method == 'GET':
-        repos = load_repos()
-        return flask.make_response(flask.render_template('index.html', repos=repos), 200)
-    elif flask.request.method == 'POST':        
-        if not verify_signature(flask.request):
-            return flask.make_response('UNAUTHORIZED', 401)
-        elif not check_request(flask.request):
+        return get()
+    elif flask.request.method == 'POST':
+        event = flask.request.headers.get('X-Github-Event', '')
+        if event == 'ping':
+            return flask.make_response('OK', 200)
+        elif event == 'label':
+            return post()
+        else:
             return flask.make_response('BAD REQUEST', 400)
-        return 'POST'
     else:
         return flask.make_response('BAD REQUEST', 400)
 
@@ -344,13 +414,10 @@ def respond():
 def run_server(ctx, host, port, debug):
     """Start local server app"""
     app.lblconfig = ctx.obj['config']
+    app.ghsession = ctx.obj['session']
     check_config(app.lblconfig)
+    # app.secret_key = app.lblconfig['github']['secret']
     app.run(host=host, port=port, debug=debug)
-
-
-def load_repos():
-    config = app.lblconfig
-    return [repo for repo in config['repos'] if config['repos'].getboolean(repo)]
 #######################################################################
 #######################################################################
 if __name__ == '__main__':
