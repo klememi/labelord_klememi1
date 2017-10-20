@@ -412,7 +412,7 @@ def respond():
 def run_server(ctx, host, port, debug):
     """Start local server app"""
     app.lblconfig = ctx.obj['config']
-    app.ghsession = ctx.obj['session']
+    # app.ghsession = ctx.obj['session']
     check_config(app.lblconfig)
     app.run(host=host, port=port, debug=debug)
 #######################################################################
