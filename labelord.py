@@ -21,7 +21,7 @@ def cli(ctx, config, token):
     cfgtoken = cfg.get('github', 'token', fallback='')
     ctx.obj['token'] = token if token else cfgtoken
     ctx.obj['config'] = cfg
-
+    ctx.obj['configpath'] = config
 
 
 @cli.command()
@@ -255,10 +255,11 @@ class LabelordWeb(flask.Flask):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.lblconfig = configparser.ConfigParser()
+        self.lblconfig.optionxform = str
 
 
     def inject_session(self, session):
-
         # TODO: inject session for communication with GitHub
         # The tests will call this method to pass the testing session.
         # Always use session from this call (it will be called before
@@ -266,38 +267,36 @@ class LabelordWeb(flask.Flask):
         # session.
         print('inject_session')
 
+
     def reload_config(self):
-        # TODO: check envvar LABELORD_CONFIG and reload the config
-        # Because there are problems with reimporting the app with
-        # different configuration, this method will be called in
-        # order to reload configuration file. Check if everything
-        # is correctly set-up
-        print('reload_config')
+        configpath = os.getenv('LABELORD_CONFIG')
+        if configpath is None:
+            configpath = './config.cfg'
+        self.lblconfig.read(configpath)
 
 
+def create_app(config_path='./config.cfg'):
+    app = LabelordWeb(__name__)
+    configpath = os.getenv('LABELORD_CONFIG')
+    if configpath is None:
+        configpath = config_path
+    app.lblconfig.read(configpath)
+    return app
 # TODO: instantiate LabelordWeb app
 # Be careful with configs, this is module-wide variable,
 # you want to be able to run CLI app as it was in task 1.
-app = LabelordWeb(__name__)
-
+app = create_app()
 # TODO: implement web app
 # hint: you can use flask.current_app (inside app context)
-def response_get():
-    envvar_config = os.environ.get('LABELORD_CONFIG')
-    configpath = envvar_config if envvar_config else './config.cfg'
-    config = configparser.ConfigParser()
-    config.optionxform = str
-    config.read(configpath)
-    return [repo for repo in config['repos'] if config['repos'].getboolean(repo)]
-
-
 @app.route('/', methods=['GET', 'POST'])
-def get():
+def respond():
     if flask.request.method == 'GET':
-        repos = response_get()
+        repos = load_repos()
         return flask.make_response(flask.render_template('index.html', repos=repos), 200)
+    elif flask.request.method == 'POST':
+        return 'POST'
     else:
-        return flask.request
+        return flask.make_response(404)
 
 
 @cli.command()
@@ -307,9 +306,17 @@ def get():
 @click.option('--debug', '-d', is_flag=True, envvar='FLASK_DEBUG', help='Debug mode.')
 def run_server(ctx, host, port, debug):
     """Start local server app"""
+    # app = create_app(ctx.obj['configpath'])
+    # flask.g._config = ctx.obj['config']
+    app.lblconfig = ctx.obj['config']
     app.run(host=host, port=port, debug=debug)
     # TODO: implement the command for starting web app (use app.run)
     # Don't forget to app the session from context to app
+
+
+def load_repos():
+    config = app.lblconfig
+    return [repo for repo in config['repos'] if config['repos'].getboolean(repo)]
 #######################################################################
 #######################################################################
 if __name__ == '__main__':
