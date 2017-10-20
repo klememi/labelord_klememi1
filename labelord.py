@@ -7,6 +7,9 @@ import configparser
 import sys
 import flask
 import os
+import hashlib
+import hmac
+import base64
 
 
 @click.group('labelord')
@@ -255,8 +258,7 @@ class LabelordWeb(flask.Flask):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.lblconfig = configparser.ConfigParser()
-        self.lblconfig.optionxform = str
+        self.lblconfig = None
 
 
     def inject_session(self, session):
@@ -269,34 +271,53 @@ class LabelordWeb(flask.Flask):
 
 
     def reload_config(self):
+        self.lblconfig = configparser.ConfigParser()
+        self.lblconfig.optionxform = str
         configpath = os.getenv('LABELORD_CONFIG')
         if configpath is None:
             configpath = './config.cfg'
         self.lblconfig.read(configpath)
+        check_config(self.lblconfig)
 
 
-def create_app(config_path='./config.cfg'):
+def check_config(lblconfig):
+    token = lblconfig.get('github', 'token', fallback='')
+    webhook_secret = lblconfig.get('github', 'webhook_secret', fallback='')
+    if not token:
+        error(3, 'No GitHub token has been provided')
+    elif not webhook_secret:
+        error(8, 'No webhook secret has been provided')
+    elif not 'repos' in lblconfig:
+        error(7, 'No repositories specification has been found')
+
+
+def create_app():
     app = LabelordWeb(__name__)
-    configpath = os.getenv('LABELORD_CONFIG')
-    if configpath is None:
-        configpath = config_path
-    app.lblconfig.read(configpath)
+    app.reload_config()
     return app
-# TODO: instantiate LabelordWeb app
-# Be careful with configs, this is module-wide variable,
-# you want to be able to run CLI app as it was in task 1.
+
+
 app = create_app()
-# TODO: implement web app
-# hint: you can use flask.current_app (inside app context)
+
+
+def verify_signature(request):
+    secret = app.lblconfig.get('github', 'webhook_secret', fallback='')
+    request_signature = request.headers['X-Hub-Signature']
+    signature = hmac.new(bytes(secret, 'UTF-8'), msg=request.data, digestmod='sha1').hexdigest()
+    return hmac.compare_digest('sha1=' + signature, request_signature)
+
+
 @app.route('/', methods=['GET', 'POST'])
 def respond():
     if flask.request.method == 'GET':
         repos = load_repos()
         return flask.make_response(flask.render_template('index.html', repos=repos), 200)
-    elif flask.request.method == 'POST':
+    elif flask.request.method == 'POST':        
+        if not verify_signature(flask.request):
+            return flask.make_response('UNAUTHORIZED', 401)
         return 'POST'
     else:
-        return flask.make_response(404)
+        return flask.make_response('BAD REQUEST', 400)
 
 
 @cli.command()
@@ -306,12 +327,9 @@ def respond():
 @click.option('--debug', '-d', is_flag=True, envvar='FLASK_DEBUG', help='Debug mode.')
 def run_server(ctx, host, port, debug):
     """Start local server app"""
-    # app = create_app(ctx.obj['configpath'])
-    # flask.g._config = ctx.obj['config']
     app.lblconfig = ctx.obj['config']
+    check_config(app.lblconfig)
     app.run(host=host, port=port, debug=debug)
-    # TODO: implement the command for starting web app (use app.run)
-    # Don't forget to app the session from context to app
 
 
 def load_repos():
