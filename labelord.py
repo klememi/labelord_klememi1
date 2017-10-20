@@ -328,7 +328,7 @@ def get():
     return flask.make_response(flask.render_template('index.html', repos=repos), 200)
 
 
-def sync_labels(event, repos, label, color):
+def sync_labels(event, repos, label, color, old_label):
     session = app.ghsession
     if not session:
         session = requests.Session()
@@ -347,7 +347,7 @@ def sync_labels(event, repos, label, color):
     elif event == 'edited':
         for repo in repos:
             data = {"name": label, "color": color}
-            code, msg = update_label(session, repo, label, data)
+            code, msg = update_label(session, repo, old_label, data)
     else:
         # deleted
         for repo in repos:
@@ -369,7 +369,12 @@ def post():
     todo_repos = list(filter(lambda x: x != original_repo, repos))
     label = json_data['label']['name']
     color = json_data['label']['color']
-    return sync_labels(event, todo_repos, label, color)
+    old_label = ''
+    if event == 'edited' and json_data.get('changes', '').get('name', ''):
+        old_label = json_data.get('changes', '').get('name', '').get('from', '')
+    else:
+        old_label = label
+    return sync_labels(event, todo_repos, label, color, old_label)
 
 
 def is_redundant():
