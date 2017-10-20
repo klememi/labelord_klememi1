@@ -9,7 +9,7 @@ import flask
 import os
 import hashlib
 import hmac
-import base64
+import json
 
 
 @click.group('labelord')
@@ -302,9 +302,23 @@ app = create_app()
 
 def verify_signature(request):
     secret = app.lblconfig.get('github', 'webhook_secret', fallback='')
-    request_signature = request.headers['X-Hub-Signature']
+    request_signature = request.headers.get('X-Hub-Signature', '')
+    if not request_signature:
+        return False
     signature = hmac.new(bytes(secret, 'UTF-8'), msg=request.data, digestmod='sha1').hexdigest()
     return hmac.compare_digest('sha1=' + signature, request_signature)
+
+
+def check_event(event):
+    return event and (event == 'ping' or event == 'label')
+
+
+def check_request(request):
+    json_data = json.loads(request.data)
+    repo = json_data['repository']['full_name']
+    repos = load_repos()
+    event = request.headers.get('X-Github-Event', '')
+    return (repo in repos) and check_event(event)
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -315,6 +329,8 @@ def respond():
     elif flask.request.method == 'POST':        
         if not verify_signature(flask.request):
             return flask.make_response('UNAUTHORIZED', 401)
+        elif not check_request(flask.request):
+            return flask.make_response('BAD REQUEST', 400)
         return 'POST'
     else:
         return flask.make_response('BAD REQUEST', 400)
