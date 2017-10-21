@@ -295,7 +295,12 @@ def check_config(lblconfig):
 
 def create_app():
     app = LabelordWeb(__name__)
-    app.reload_config()
+    app.lblconfig = configparser.ConfigParser()
+    app.lblconfig.optionxform = str
+    configpath = os.getenv('LABELORD_CONFIG')
+    if configpath is None:
+        configpath = './config.cfg'
+    app.lblconfig.read(configpath)
     return app
 
 
