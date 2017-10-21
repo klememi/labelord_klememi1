@@ -15,7 +15,7 @@ import json
 @click.group('labelord')
 @click.option('-c', '--config', default='./config.cfg', envvar='LABELORD_CONFIG', help='Configuration file path.')
 @click.option('-t', '--token', envvar='GITHUB_TOKEN', default='', help='GitHub token.')
-@click.version_option(version=0.2, prog_name='labelord')
+@click.version_option(version=0.1, prog_name='labelord')
 @click.pass_context
 def cli(ctx, config, token):
     cfg = configparser.ConfigParser()
