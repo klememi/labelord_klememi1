@@ -47,8 +47,20 @@ def create_app():
     return app
 
 
+def load_repos():
+    config = app.lblconfig
+    return [repo for repo in config['repos'] if config['repos'].getboolean(repo)]
+
+
+def check_request(request):
+    json_data = json.loads(request.data)
+    repo = json_data['repository']['full_name']
+    repos = load_repos()
+    return repo in repos
+
+
 def get():
-    repos = load_repos(app)
+    repos = load_repos()
     return flask.make_response(flask.render_template('index.html', repos=repos), 200)
 
 
@@ -59,7 +71,7 @@ def post():
         return flask.make_response('BAD REQUEST', 400)
     if is_redundant(app):
         return flask.make_response('OK', 200)
-    repos = load_repos(app)
+    repos = load_repos()
     json_data = json.loads(flask.request.data)
     original_repo = json_data['repository']['full_name']
     event = json_data['action']
@@ -72,6 +84,33 @@ def post():
     else:
         old_label = label
     return sync_labels(event, todo_repos, label, color, old_label)
+
+
+def sync_labels(event, repos, label, color, old_label):
+    session = app.ghsession
+    if not session:
+        session = requests.Session()
+        session.headers = {'User-Agent': 'mi-pyt-02-labelord'}
+        github_token = app.lblconfig['github']['token']
+        if not github_token:
+            error(3, 'No GitHub token has been provided')
+        def token_auth(req):
+            req.headers['Authorization'] = 'token ' + github_token
+            return req
+        session.auth = token_auth
+    if event == 'created':
+        for repo in repos:
+            data = {"name": label, "color": color}
+            code, msg = add_label(session, repo, data)
+    elif event == 'edited':
+        for repo in repos:
+            data = {"name": label, "color": color}
+            code, msg = update_label(session, repo, old_label, data)
+    else:
+        # deleted
+        for repo in repos:
+            code, msg = delete_label(session, repo, label)
+    return flask.make_response('OK', 200)
 
 
 app = create_app()

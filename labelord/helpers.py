@@ -4,7 +4,6 @@ import requests
 import json
 import flask
 import sys
-from .web import *
 
 
 def check_config(lblconfig):
@@ -18,11 +17,6 @@ def check_config(lblconfig):
         error(3, 'No GitHub token has been provided')
 
 
-def load_repos(app):
-    config = app.lblconfig
-    return [repo for repo in config['repos'] if config['repos'].getboolean(repo)]
-
-
 def verify_signature(request, app):
     secret = app.lblconfig.get('github', 'webhook_secret', fallback='')
     request_signature = request.headers.get('X-Hub-Signature', '')
@@ -30,13 +24,6 @@ def verify_signature(request, app):
         return False
     signature = hmac.new(bytes(secret, 'UTF-8'), msg=request.data, digestmod='sha1').hexdigest()
     return hmac.compare_digest('sha1=' + signature, request_signature)
-
-
-def check_request(request):
-    json_data = json.loads(request.data)
-    repo = json_data['repository']['full_name']
-    repos = load_repos()
-    return repo in repos
 
 
 def is_redundant(app):

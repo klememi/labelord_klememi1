@@ -141,30 +141,3 @@ def get_repos(all_repos, config):
         return [repo for repo in config['repos'] if config['repos'].getboolean(repo)]
     else:
         error(7, 'No repositories specification has been found')
-
-
-def sync_labels(event, repos, label, color, old_label):
-    session = app.ghsession
-    if not session:
-        session = requests.Session()
-        session.headers = {'User-Agent': 'mi-pyt-02-labelord'}
-        github_token = app.lblconfig['github']['token']
-        if not github_token:
-            error(3, 'No GitHub token has been provided')
-        def token_auth(req):
-            req.headers['Authorization'] = 'token ' + github_token
-            return req
-        session.auth = token_auth
-    if event == 'created':
-        for repo in repos:
-            data = {"name": label, "color": color}
-            code, msg = add_label(session, repo, data)
-    elif event == 'edited':
-        for repo in repos:
-            data = {"name": label, "color": color}
-            code, msg = update_label(session, repo, old_label, data)
-    else:
-        # deleted
-        for repo in repos:
-            code, msg = delete_label(session, repo, label)
-    return flask.make_response('OK', 200)
