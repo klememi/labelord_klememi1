@@ -7,7 +7,7 @@ with open('README') as f:
 
 setup(
     name='labelord_klememi1',
-    version='0.3',
+    version='0.3.1',
     description='Synchronizes label in configured GitHub repositories.',
     long_description=long_description,
     author='Michal Klement',
