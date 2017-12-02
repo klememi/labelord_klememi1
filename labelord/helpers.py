@@ -7,6 +7,11 @@ import sys
 
 
 def check_config(lblconfig):
+    '''
+    Checks if config file is valid.
+
+    :param lblconfig: Config loaded with configparser to be checked.
+    '''
     token = lblconfig.get('github', 'token', fallback='')
     webhook_secret = lblconfig.get('github', 'webhook_secret', fallback='')
     if not webhook_secret:
@@ -18,6 +23,13 @@ def check_config(lblconfig):
 
 
 def verify_signature(request, app):
+    '''
+    Verifies signature of request.
+
+    :param request: Request which signature should be verified.
+    :param app: Flask app variable.
+    :return: True if signature is ok, False otherwise.
+    '''
     secret = app.lblconfig.get('github', 'webhook_secret', fallback='')
     request_signature = request.headers.get('X-Hub-Signature', '')
     if not request_signature:
@@ -27,6 +39,12 @@ def verify_signature(request, app):
 
 
 def is_redundant(app):
+    '''
+    Checks if incoming request is redundant.
+
+    :param app: Flask app variable.
+    :return: True if request is redundant and should be ignored, False otherwise.
+    '''
     json_data = json.loads(flask.request.data)
     new_action = json_data['action']
     new_label = json_data['label']['name']

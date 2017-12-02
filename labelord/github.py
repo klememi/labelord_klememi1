@@ -5,6 +5,12 @@ from .helpers import *
 
 @click.pass_context
 def get_response(ctx, uri):
+    '''
+    Gets a response from GitHub API.
+
+    :param uri: Part of URL after https://api.github.com/ to retrieve response from.
+    :return: Tuple of response and status code.
+    '''
     session = ctx.obj.get('session', requests.Session())
     response = session.get('https://api.github.com/' + uri)
     if response.status_code == 401:
@@ -13,6 +19,15 @@ def get_response(ctx, uri):
 
 
 def update_label(session, repo, label, data):
+    '''
+    Updates a label with given data.
+
+    :param session: Session to use for communication with GitHub API.
+    :param repo: Full repository name where is label to be changed.
+    :param label: Name of the label to be changed.
+    :param data: Data in JSON format for the label to be updated to, containing name and color keys.
+    :return: Tuple of status code and response message if some error occured, otherwise None.
+    '''
     response = session.patch('https://api.github.com/repos/{}/labels/{}'.format(repo, label), json=data)
     if response.status_code == 200:
         return response.status_code, None
@@ -20,6 +35,14 @@ def update_label(session, repo, label, data):
 
 
 def add_label(session, repo, data):
+    '''
+    Adds a label with given data.
+
+    :param session: Session to use for communication with GitHub API.
+    :param repo: Full repository name where is label to be changed.
+    :param data: Data in JSON format for the label to be added, containing name and color keys.
+    :return: Tuple of status code and response message if some error occured, otherwise None.
+    '''
     response = session.post('https://api.github.com/repos/{}/labels'.format(repo), json=data)
     if response.status_code == 201:
         return response.status_code, None
@@ -27,6 +50,14 @@ def add_label(session, repo, data):
 
 
 def delete_label(session, repo, label):
+    '''
+    Deletes a label with given name from the repository.
+
+    :param session: Session to use for communication with GitHub API.
+    :param repo: Full repository name where is label to be changed.
+    :param label: Name of the label to be removed.
+    :return: Tuple of status code and response message if some error occured, otherwise None.
+    '''
     response = session.delete('https://api.github.com/repos/{}/labels/{}'.format(repo, label))
     if response.status_code == 204:
         return response.status_code, None
@@ -34,6 +65,16 @@ def delete_label(session, repo, label):
 
 
 def perform_operation(replace, repos, labels, dry_run, logging, session):
+    '''
+    Performs a given operation with labels on GitHub repositories.
+
+    :param replace: True if labels should be completely replaced by the templates.
+    :param repos: Full names of the repositories for the action to be performed on.
+    :param labels: Names of the template labels.
+    :param dry_run: True if operation should not be done on actual GitHub repositories.
+    :param logging: 1 if logs should be printed on stdout, 0 otherwise.
+    :param session: Session to use for communication with GitHub API.
+    '''
     errors = 0
     update_repos = set()
     for repo in repos:
@@ -118,6 +159,13 @@ def perform_operation(replace, repos, labels, dry_run, logging, session):
 
 
 def get_labels(template_repository, config):
+    '''
+    Gets labels names and color from repository.
+
+    :param template_repository: Full name of the template repository.
+    :param config: Config loaded with configparser to be used as a template if template_repository is not provided.
+    :return: Dictionary of label names as keys and labels colors as values.
+    '''
     if template_repository:
         response, code = get_response('repos/{}/labels?per_page=100&page=1'.format(template_repository))
         if code == 200:
@@ -131,6 +179,13 @@ def get_labels(template_repository, config):
 
 
 def get_repos(all_repos, config):
+    '''
+    Gets full repositories names which should be used to work with Labelord application.
+
+    :param all_repos: True if all users repositories should be used.
+    :param config: Config loaded with configparser which contains repositories to be used.
+    :return: Array of full repositories names.
+    '''
     if all_repos:
         response, code = get_response('user/repos?per_page=100&page=1')
         if code == 200:
