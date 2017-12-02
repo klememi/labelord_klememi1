@@ -64,6 +64,33 @@ def delete_label(session, repo, label):
     return response.status_code, response.json().get('message', '')
 
 
+def log_suc(action_tag, dry_tag, repo, label, color):
+    '''
+    Logs successfull action.
+
+    :param action_tag: Tag for action done.
+    :param dry_tag: Tag indicating dry run or not.
+    :param repo: Repository name.
+    :param label: Label name.
+    :param color: Label color.
+    '''
+    print('[{}][{}] {}; {}; {}'.format(action_tag, dry_tag, repo, label, color))
+
+
+def log_err(tag, repo, label, color, code, msg):
+    '''
+    Logs unsuccessful action.
+
+    :param tag: Tag for action done unsuccessfully.
+    :param repo: Repository name.
+    :param label: Label name.
+    :param color: Label color.
+    :param code: Response code.
+    :param msg: Response message.
+    '''
+    print('[{}][ERR] {}; {}; {}; {} - {}'.format(tag, repo, label, color, code, msg))
+
+
 def perform_operation(replace, repos, labels, dry_run, logging, session):
     '''
     Performs a given operation with labels on GitHub repositories.
@@ -93,9 +120,11 @@ def perform_operation(replace, repos, labels, dry_run, logging, session):
                             update_data = {"name": label, "color": labels[label]}
                             response_code, message = update_label(session, repo, rlabel, update_data)
                             if response_code == 200 and logging == 1:
-                                print('[UPD][SUC] {}; {}; {}'.format(repo, label, labels[label]))
+                                log_suc('UPD', 'SUC', repo, label, labels[label])
+                                # print('[UPD][SUC] {}; {}; {}'.format(repo, label, labels[label]))
                             elif response_code != 200 and logging == 1:
-                                print('[UPD][ERR] {}; {}; {}; {} - {}'.format(repo, label, labels[label], response_code, message))
+                                log_err('UPD', repo, label, labels[label], response_code, message)
+                                # print('[UPD][ERR] {}; {}; {}; {} - {}'.format(repo, label, labels[label], response_code, message))
                                 errors += 1
                             elif response_code != 200 and logging == 0:
                                 error(0, 'ERROR: UPD; {}; {}; {}; {} - {}'.format(repo, label, labels[label], response_code, message))
@@ -104,15 +133,18 @@ def perform_operation(replace, repos, labels, dry_run, logging, session):
                                 errors += 1
                         else:
                             if logging == 1:
-                                print('[UPD][DRY] {}; {}; {}'.format(repo, label, labels[label]))
+                                log_suc('UPD', 'DRY', repo, label, labels[label])
+                                # print('[UPD][DRY] {}; {}; {}'.format(repo, label, labels[label]))
                 else:
                     if not dry_run:
                         add_data = {"name": label, "color": labels[label]}
                         response_code, message = add_label(session, repo, add_data)
                         if response_code == 201 and logging == 1:
-                            print('[ADD][SUC] {}; {}; {}'.format(repo, label, labels[label]))
+                            log_suc('ADD', 'SUC', repo, label, labels[label])
+                            # print('[ADD][SUC] {}; {}; {}'.format(repo, label, labels[label]))
                         elif response_code != 201 and logging == 1:
-                            print('[ADD][ERR] {}; {}; {}; {} - {}'.format(repo, label, labels[label], response_code, message))
+                            log_err('ADD', repo, label, labels[label], response_code, message)
+                            # print('[ADD][ERR] {}; {}; {}; {} - {}'.format(repo, label, labels[label], response_code, message))
                             errors += 1
                         elif response_code != 201 and logging == 0:
                             error(0, 'ERROR: ADD; {}; {}; {}; {} - {}'.format(repo, label, labels[label], response_code, message))
@@ -121,14 +153,17 @@ def perform_operation(replace, repos, labels, dry_run, logging, session):
                             errors += 1
                     else:
                         if logging == 1:
-                            print('[ADD][DRY] {}; {}; {}'.format(repo, label, labels[label]))
+                            log_suc('ADD', 'DRY', repo, label, labels[label])
+                            # print('[ADD][DRY] {}; {}; {}'.format(repo, label, labels[label]))
             for label in labels_to_delete:
                 if not dry_run:
                     response_code, message = delete_label(session, repo, label)
                     if response_code == 204 and logging == 1:
-                        print('[DEL][SUC] {}; {}; {}'.format(repo, label, repo_labels[label]))
+                        log_suc('DEL', 'SUC', repo, label, repo_labels[label])
+                        # print('[DEL][SUC] {}; {}; {}'.format(repo, label, repo_labels[label]))
                     elif response_code != 204 and logging == 1:
-                        print('[DEL][ERR] {}; {}; {}; {} - {}'.format(repo, label, repo_labels[label], response_code, message))
+                        log_err('DEL', repo, label, repo_labels[label], response_code, message)
+                        # print('[DEL][ERR] {}; {}; {}; {} - {}'.format(repo, label, repo_labels[label], response_code, message))
                         errors += 1
                     elif response_code != 204 and logging == 0:
                         error(0, 'ERROR: DEL; {}; {}; {}; {} - {}'.format(repo, label, repo_labels[label], response_code, message))
@@ -137,7 +172,8 @@ def perform_operation(replace, repos, labels, dry_run, logging, session):
                         errors += 1
                 else:
                     if logging == 1:
-                        print('[DEL][DRY] {}; {}; {}'.format(repo, label, repo_labels[label]))
+                        log_suc('DEL', 'SUC', repo, label, repo_labels[label])
+                        # print('[DEL][DRY] {}; {}; {}'.format(repo, label, repo_labels[label]))
         elif logging == 1:
             print('[LBL][ERR] {}; {} - {}'.format(repo, code, response.json().get('message', '')))
             errors += 1

@@ -45,6 +45,9 @@ API reference
 - :ref:`webmodule`
 - :ref:`helpersmodule`
 
+License
+-------
+:ref:`license`
 
 .. toctree::
    :maxdepth: 2
@@ -56,8 +59,3 @@ API reference
    examples
    api
    license
-
-
-License
--------
-:ref:`license`

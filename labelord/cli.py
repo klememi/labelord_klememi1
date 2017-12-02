@@ -9,7 +9,7 @@ from .github import *
 @click.group('labelord')
 @click.option('-c', '--config', default='./config.cfg', envvar='LABELORD_CONFIG', help='Configuration file path.')
 @click.option('-t', '--token', envvar='GITHUB_TOKEN', default='', help='GitHub token.')
-@click.version_option(version=0.3, prog_name='labelord')
+@click.version_option(version=0.5, prog_name='labelord')
 @click.pass_context
 def cli(ctx, config, token):
     cfg = configparser.ConfigParser()
@@ -71,7 +71,7 @@ def list_labels(ctx, reposlug):
 @click.option('-r', '--template-repo', default='', help='Repository to use as a template.')
 @click.pass_context
 def run(ctx, mode, all_repos, dry_run, verbose, quiet, template_repo):
-    """Run labels processing."""
+    """Run labels processingpython -m pip install --extra-index-url https://test.pypi.org/pypi labelord_klememi1"""
     session = set_session()
     config = ctx.obj.get('config')
     template_repository = template_repo if template_repo else config.get('others', 'template-repo', fallback='')

@@ -9,6 +9,12 @@ Access token
 ------------
 **Labelord** is working with *GitHub* so valid access token needs to be provided for the application to work properly. You can generate a new one `here <https://github.com/settings/tokens/new>`_. Make sure that **repo** scope is selected if you want to also manage your private repositories.
 
+You can provide your token to application by 3 ways (sorted from lowest priority):
+
+- Directive in configuration file, see :ref:`configfile` below
+- Via environmental variable `GITHUB_TOKEN`
+- `-t / --token` option of command-line application
+
 **Do not forget that no one should know your personal token so never make it public!**
 
 .. _webhook:
@@ -21,6 +27,8 @@ Labelord offers an option to handle changes on labels of your repositories autom
 - Content type: **application/json**
 - Secret: Your secret passphrase, which you also need to set in Labelord config. It's used to check that incoming request is from real GitHub.
 - Trigger events: **label**
+
+Copy your webhook secret to configuration file, as you can see below.
 
 .. _configfile:
 
