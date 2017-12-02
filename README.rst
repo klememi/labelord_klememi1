@@ -1,5 +1,13 @@
 Labelord
 ========
+|travis| |rtd|
+
+.. |travis| image:: https://travis-ci.org/klememi/labelord_klememi1.svg?branch=master
+    :target: https://travis-ci.org/klememi/labelord_klememi1
+    :alt: Build Status
+.. |rtd| image:: https://readthedocs.org/projects/labelord-klememi1/badge/?version=latest
+    :target: http://labelord-klememi1.readthedocs.io/en/latest/?badge=latest
+    :alt: Documentation Status
 
 Labelord is small GitHub labels manager. Labels in configured repositories can be automatically kept in sync. This was coded as a school project at *FIT CTU* in Prague.
 
@@ -20,7 +28,7 @@ Installation
 Documentation
 -------------
 
-Please see full documentation on <link> for more information.
+Please see full documentation on http://labelord-klememi1.rtfd.io/ for more information.
 
 Optionally you can build *docs* yourself.
 
