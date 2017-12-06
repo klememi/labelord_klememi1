@@ -14,7 +14,7 @@ Labelord
     :target: https://github.com/klememi/labelord_klememi1/blob/master/LICENSE
 
 Labelord is small GitHub labels manager. Labels in configured repositories can be automatically kept in sync. This was coded as a school project at *FIT CTU* in Prague.
-
+ca
 Installation
 ------------
 
@@ -36,9 +36,10 @@ Please see full documentation on http://labelord-klememi1.rtfd.io/ for more info
 
 Optionally you can build *docs* yourself.
 
-1. run ``python -m pip install -r docs/requirements.txt``
-2. ``make html`` in **docs** folder to generate html
-3. ``make doctest`` in **docs** folder to test documentation
+1. install application (see `Installation`_)
+2. run ``python -m pip install -r docs/requirements.txt``
+3. ``make html`` in **docs** folder to generate html
+4. ``make doctest`` in **docs** folder to test documentation
 
 License
 -------
