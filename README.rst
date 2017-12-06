@@ -14,7 +14,7 @@ Labelord
     :target: https://github.com/klememi/labelord_klememi1/blob/master/LICENSE
 
 Labelord is small GitHub labels manager. Labels in configured repositories can be automatically kept in sync. This was coded as a school project at *FIT CTU* in Prague.
-ca
+
 Installation
 ------------
 
